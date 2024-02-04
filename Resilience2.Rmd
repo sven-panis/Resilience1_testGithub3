@@ -1,0 +1,137 @@
+---
+title: "Resilience 2"
+author: "sven panis"
+date: "2024-02-02"
+output: html_document
+---
+
+
+
+```{r chunk1}
+library(tidyverse)
+demo_data <- read_csv("demographic_data.csv")
+q_data <- read_csv("questionnaire_data.csv")
+scoring <- read_csv("scoring.csv")
+
+demo_cleaned <- demo_data %>%
+  mutate(treatment = factor(treatment, 
+                            levels = c(1,2), 
+                            labels = c("control", "intervention")),
+         gender = as.factor(gender),
+         participant_ID = as.character(participant_ID)) # convert to character
+
+q_cleaned <- q_data %>%
+  mutate(participant_ID = as.character(participant_ID))
+
+dat_wide <- inner_join(x = demo_cleaned, y = q_cleaned, by = "participant_ID") 
+
+summary(dat_wide)
+```
+
+```{r chunk2}
+missing_data <- dat_wide %>%
+  summarise_all(~sum(is.na(.)))
+
+dat_complete <- dat_wide %>%
+  drop_na() # complete data for each ppt
+
+dat_final <- dat_wide %>%
+  drop_na(-participant_ID, -gender, -age) # only remove ppt if NA in 
+
+```
+
+```{r}
+dat_long <- dat_final %>%
+  pivot_longer(cols = bounce_back_quickly:long_time_over_setbacks, 
+               names_to = "item", 
+               values_to = "response")
+
+dat <- inner_join(x = dat_long, y = scoring, by = c("item", "response"))
+
+dat_scores <- dat %>%
+  group_by(participant_ID, age, gender, treatment) %>%
+  summarise(resilience_score = mean(score, na.rm = TRUE)) %>%
+  ungroup()
+dat_scores2 <- dat %>%
+  group_by(participant_ID, age, gender, treatment) %>%
+  summarise(resilience_score = mean(score)) %>%
+  ungroup()
+
+
+```
+
+```{r}
+dat_scores <- dat_scores %>%
+  mutate(age_corrected = age + 1)
+
+dat_scores <- dat_scores %>%
+  mutate(age_category = case_when(age_corrected <= 30 ~ "Younger",
+                                  age_corrected > 30 ~ "Older", 
+                                  .default = NA, ),
+         age_category = as.factor(age_category))
+summary(dat_scores)
+
+dat_scores <- dat_scores %>%
+  mutate(gender_corrected = case_when(gender == "man" ~ "woman",
+                                      gender == "woman" ~ "man",
+                                      .default = gender),
+         gender_corrected = as.factor(gender_corrected))
+summary(dat_scores)
+```
+
+```{r}
+# total ppts
+dat_scores %>%
+  count()
+
+# gender split
+dat_scores %>%
+  count(gender)
+
+# mean age, sd and missing
+dat_scores %>%
+  summarise(mean_age = mean(age, na.rm = TRUE),
+    sd_age = sd(age, na.rm = TRUE),
+    missing = sum(is.na(age)))
+
+# number in each condition
+dat_scores %>%
+  count(treatment)
+```
+
+```{r}
+# overall resilience score
+dat_scores %>%
+  summarise(mean_score = mean(resilience_score),
+            sd_score = sd(resilience_score),
+            min_score = min(resilience_score),
+            max = max(resilience_score))
+
+# resilience scores by group
+
+dat_scores %>%
+  group_by(treatment) %>%
+  summarise(mean_score = mean(resilience_score),
+            sd_score = sd(resilience_score),
+            min_score = min(resilience_score),
+            max = max(resilience_score))
+
+# visualisation
+
+## histogram by group
+
+ggplot(dat_scores, aes(x = resilience_score, fill = treatment)) +
+  geom_histogram(colour = "black") +
+  facet_wrap(~ treatment, nrow = 2) +
+  guides(fill = "none") +
+  scale_fill_viridis_d(option = "E")
+
+# violin-boxplot
+
+ggplot(dat_scores, aes(x = treatment, y = resilience_score, fill = treatment)) +
+  geom_violin(alpha = .3) +
+  geom_boxplot(width = .2, alpha = .6)+
+  guides(fill = "none") +
+  scale_fill_viridis_d(option = "E")
+```
+

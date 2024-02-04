@@ -1,0 +1,103 @@
+---
+title: "Resilience1"
+author: "sven panis"
+date: "2024-02-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+demo_data <- read_csv("demographic_data.csv")
+q_data <- read_csv("questionnaire_data.csv")
+scoring <- read_csv("scoring.csv")
+```
+
+```{r}
+summary(demo_data)
+summary(q_data)
+summary(scoring)
+```
+
+```{r}
+demo_cleaned <- demo_data %>%
+  mutate(treatment = factor(treatment, 
+                            levels = c(1,2), 
+                            labels = c("control", "intervention")),
+         gender = as.factor(gender),
+         participant_ID = as.character(participant_ID)) # convert to character
+summary(demo_cleaned)
+```
+
+```{r}
+q_cleaned <- q_data %>%
+  mutate(participant_ID = as.character(participant_ID))
+```
+
+```{r}
+dat_wide <- inner_join(x = demo_cleaned, y = q_cleaned, by = "participant_ID") 
+```
+
+```{r}
+dat_long <- dat_wide %>%
+  pivot_longer(cols = bounce_back_quickly:long_time_over_setbacks, 
+               names_to = "item", 
+               values_to = "response")
+```
+
+```{r}
+dat <- inner_join(x = dat_long, y = scoring, by = c("item", "response"))
+```
+
+```{r}
+dat_scores <- dat %>%
+  group_by(participant_ID, age, gender, treatment) %>%
+  summarise(resilience_score = mean(score, na.rm = TRUE)) %>%
+  ungroup()
+
+dat_scores2 <- dat %>%
+  group_by(participant_ID, age, gender, treatment) %>%
+  summarise(resilience_score = mean(score, na.rm = TRUE)) 
+
+```
+
+```{r}
+dat_scores %>%
+  group_by(gender) %>%
+  summarise(group_score = mean(resilience_score, na.rm = TRUE))
+dat_scores %>%
+  group_by(treatment) %>%
+  summarise(group_score = mean(resilience_score, na.rm = TRUE))
+```
+
+```{r}
+# plot data: violin-boxplot for resilience sccores by gender
+p <-ggplot(data = dat_scores, aes(x = gender, y = resilience_score)) +
+  geom_violin(aes(fill = gender), show.legend = F) 
+p + geom_boxplot(width = 0.1) +
+  theme_minimal() +
+  labs(y = "scores (1-5)",
+       title = "Resilience scores by gender")
+
+
+ggplot(dat_scores, aes(x = resilience_score, fill = treatment)) +
+  geom_histogram(binwidth = .2, show.legend = F) +
+ facet_wrap(~treatment, nrow = 2) 
+
+
+ggplot(data = dat_scores, aes(x = treatment, y = resilience_score)) +
+    geom_boxplot(width = 0.5) +
+   guides(fill = "none")+
+    geom_jitter(width = .1, height = .2, aes(colour = treatment), alpha = .2, show.legend = F)  +
+   scale_y_continuous(limits = c(1,5)) +
+    theme_minimal() +
+    coord_flip() +
+  labs(x = NULL,
+       y = "Scores (1-5)")
+
+  
+```
+
